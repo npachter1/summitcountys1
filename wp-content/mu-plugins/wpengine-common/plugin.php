@@ -506,7 +506,6 @@ class WpeCommon extends WpePlugin_common {
 
 				//admin menu hooks
 			if ( is_multisite() ) {
-				$this->upload_space_load();
 				add_action( 'network_admin_menu', array( $this, 'wp_hook_admin_menu' ) );
 			} else {
 				add_action( 'admin_menu', array( $this, 'wp_hook_admin_menu' ) );
@@ -677,34 +676,6 @@ class WpeCommon extends WpePlugin_common {
 		}
 
     }
-
-	// Gets site dirsize value from our API and store it in a transient
-	public function upload_space_load() {
-		$upload_dirs = wp_upload_dir();
-        $dir = $upload_dirs['basedir'];
-		$key     = 'dirsize_cache';
-		$dirsize = get_transient( $key );
-
-		// Extra validation in case $dirsize is scalar initialize $dirsize to array
-		if ( is_scalar($dirsize) ) {
-			delete_transient( $key );
-			$dirsize = array();
-		}
-
-		// If don't have value, go get it.
-		if ( ! is_array( $dirsize ) || ! isset( $dirsize[$dir]['size'] ) ) {
-		    $size = FALSE;
-		    if( !is_wpe_snapshot() ) {
-    			include_once WPE_PLUGIN_DIR.'/class-wpeapi.php';
-    			$usage = new WPE_Disk_Usage();
-    			$size = 1024 * $usage->get();
-		    }
-		    $dirsize[$dir] = array();
-		    $dirsize[$dir]['size'] = $size;
-		}
-
-		set_transient( $key, $dirsize, 3600 );
-	}
 
 	public function redirect_to_user_portal() {
         	if ( empty( $_GET['page'] ) && $_GET['page'] )
@@ -1592,7 +1563,7 @@ class WpeCommon extends WpePlugin_common {
 			case 'purge-all-caches':
 				ob_start();
 				WpeCommon::purge_memcached();
-				WpeCommon::clear_maxcdn_cache();
+				WpeCommon::clear_cdn_cache();
 				WpeCommon::purge_varnish_cache();  // refresh our own cache (after CDN purge, in case that needed to clear before we access new content)
 				$this->purge_object_cache();
 				ob_end_clean();
@@ -1616,7 +1587,14 @@ class WpeCommon extends WpePlugin_common {
 		exit( 0 );
 	}
 
+    // Previous function call, left for backwards compatibility
+    // @deprecated in a539aa9 in favor of WpeCommon::clear_cdn_cache()
     public static function clear_maxcdn_cache() {
+	    _deprecated_function( __METHOD__, 'a539aa9', static::class . '::clear_cdn_cache()' );
+	    self::clear_cdn_cache();
+    }
+
+    public static function clear_cdn_cache() {
         if ( WPE_DISABLE_CACHE_PURGING )
             return false;
 
@@ -1705,7 +1683,7 @@ class WpeCommon extends WpePlugin_common {
             //error_log("micropurge: $post_id");
             // Determine the set of paths to purge.  If there's no post_id, purge all. Otherwise name the paths.
             $purge_domains = array( $blog_domain );
-            $blog_path = WpeCommon::get_path_trailing_slash( @$blog_url_parts['path'] );
+            $blog_path = WpeCommon::get_path_trailing_slash( $blog_url_parts['path'] ?? null );
             if ( $blog_path == '/' ) {
                 $blog_path_prefix = "";
             } else {
@@ -2026,8 +2004,8 @@ class WpeCommon extends WpePlugin_common {
 		}
 
 		// check for js references
-		$contains_js = str_contains($url_str, "javascript:");
-		if ($contains_js) {
+		$contains_js = stripos($url_str, "javascript:");
+		if ($contains_js !== false) {
 			return false;
 		}
 

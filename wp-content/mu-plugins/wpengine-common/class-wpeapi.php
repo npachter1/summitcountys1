@@ -5,65 +5,6 @@
  */
 if(!defined('ABSPATH')) { wp_die('No direct access allowed!'); }
 
-if ( ! class_exists( 'WPE_Disk_Usage', false ) ) :
-class WPE_Disk_Usage
-{
-	const CACHE_TTL = 360000;	// 100 hours
-	public function get ()
-	{
-		global $blog_id;
-		$usage = $this->the_data();
-		if ( ! $usage || ! is_array($usage) ) return 0;
-		if ( isset($usage[$blog_id]['kbytes']) )
-			return $usage[$blog_id]['kbytes'];
-		else if ( 1 == $blog_id ) // if blog_id not in our data, return the top level number.
-			return @$usage[0]['kbytes'];
-		else
-			return 0;
-	}
-	private function the_data ()
-	{
-		$usage = get_site_option('wpe_upload_space_usage');
-		$ttl = get_site_option('wpe_upload_space_usage_ttl');
-
-		// If TTL is more then interval from now, it's bogus, so kill it.
-		if ( $ttl > (time() + self::CACHE_TTL) )
-			$ttl = false;
-
-		// If have from cache and it's within TTL, then do nothing else.
-		// If TTL has not expired, leave
-		if ( $ttl && $ttl >= time() )
-			return $usage;
-
-		// Get the value and save it in the cache
-		$usage_remote = $this->from_remote();
-
-		$expire = time() + self::CACHE_TTL;
-		// If did not have an initial value
-		if ( false === $usage ) {
-			add_site_option( 'wpe_upload_space_usage', $usage_remote );
-			add_site_option( 'wpe_upload_space_usage_ttl', $expire );
-		} else {
-			update_site_option( 'wpe_upload_space_usage', $usage_remote );
-			update_site_option( 'wpe_upload_space_usage_ttl', $expire );
-		}
-		return $usage_remote;
-	}
-	// Pull the data from our API.
-	private function from_remote ()
-	{
-		$data = array();
-		$url = 'https://api.wpengine.com/1.2/?method=disk-usage&account_name=' . PWP_NAME . '&wpe_apikey='.WPE_APIKEY.'&blog_id=all';
-		$http = new WP_Http;
-		$msg  = $http->get( $url );
-		if ( ! is_a( $msg, 'WP_Error' ) && isset( $msg['body'] ) ) {
-			$data = json_decode( $msg['body'], TRUE );
-		}
-		return $data;
-	}
-}
-endif;
-
 class WPE_API {
 	private $wp_http;
 
